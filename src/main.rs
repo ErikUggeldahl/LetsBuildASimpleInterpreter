@@ -31,7 +31,7 @@ impl fmt::Display for Token {
 }
 
 struct InterpreterIter<'a> {
-    iter: std::iter::Enumerate<std::str::Chars<'a>>,
+    iter: std::iter::Peekable<std::iter::Enumerate<std::str::Chars<'a>>>,
 }
 
 impl<'a> Iterator for InterpreterIter<'a> {
@@ -44,7 +44,17 @@ impl<'a> Iterator for InterpreterIter<'a> {
         };
 
         if character.is_digit(10) {
-            return Some(Ok(Token::Integer(character.to_digit(10).unwrap() as i32)));
+            let mut base = character.to_digit(10).unwrap() as i32;
+            loop {
+                match self.iter.peek() {
+                    Some(&(_, c)) if c.is_digit(10) => {
+                        base = base * 10 + c.to_digit(10).unwrap() as i32;
+                        self.iter.next();
+                    },
+                    _ => break,
+                }
+            }
+            return Some(Ok(Token::Integer(base)));
         }
 
         match character {
@@ -87,7 +97,7 @@ impl Interpreter {
 
     fn iter(&self) -> InterpreterIter {
         InterpreterIter {
-            iter: self.text.chars().enumerate(),
+            iter: self.text.chars().enumerate().peekable(),
         }
     }
 
@@ -134,7 +144,7 @@ fn main() {
 
     println!("{}", i.expr().unwrap());
 
-    let i = Interpreter::new("9+9".to_string());
+    let i = Interpreter::new("20+55".to_string());
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("3".to_string());
