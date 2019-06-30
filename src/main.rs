@@ -127,11 +127,14 @@ impl Interpreter {
         let mut iter = self.iter();
         let left = Self::parse_digit(iter.next())?;
 
-        let _operator = Self::parse_operator(iter.next())?;
+        let operator = Self::parse_operator(iter.next())?;
 
         let right = Self::parse_digit(iter.next())?;
 
-        Ok(left + right)
+        match operator {
+            Operator::Plus => Ok(left + right),
+            Operator::Minus => Ok(left - right),
+        }
     }
 }
 
@@ -149,6 +152,9 @@ fn main() {
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("  20  +   55  ".to_string());
+    println!("{}", i.expr().unwrap());
+
+    let i = Interpreter::new(" 82 - 43 ".to_string());
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("3".to_string());
