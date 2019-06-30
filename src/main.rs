@@ -38,9 +38,13 @@ impl<'a> Iterator for InterpreterIter<'a> {
     type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (position, character) = match self.iter.next() {
-            Some(token) => token,
-            None => return None,
+        let (position, character) = loop {
+            let (position, character) = match self.iter.next() {
+                Some(character) => character,
+                None => return None,
+            };
+            if character == ' ' { continue; }
+            break (position, character)
         };
 
         if character.is_digit(10) {
@@ -144,7 +148,7 @@ fn main() {
 
     println!("{}", i.expr().unwrap());
 
-    let i = Interpreter::new("20+55".to_string());
+    let i = Interpreter::new("  20  +   55  ".to_string());
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("3".to_string());
