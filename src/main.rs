@@ -2,8 +2,10 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 enum Operator {
-    Plus,
-    Minus,
+    Addition,
+    Subtraction,
+    Multiplication,
+    Division,
 }
 
 impl fmt::Display for Operator {
@@ -62,8 +64,10 @@ impl<'a> Iterator for InterpreterIter<'a> {
         }
 
         match character {
-            '+' => Some(Ok(Token::Operator(Operator::Plus))),
-            '-' => Some(Ok(Token::Operator(Operator::Minus))),
+            '+' => Some(Ok(Token::Operator(Operator::Addition))),
+            '-' => Some(Ok(Token::Operator(Operator::Subtraction))),
+            '×' | '*' => Some(Ok(Token::Operator(Operator::Multiplication))),
+            '÷' | '/' => Some(Ok(Token::Operator(Operator::Division))),
             _ => Some(Err(ParseError::UnexpectedCharacter(character, position))),
         }
 
@@ -132,15 +136,17 @@ impl Interpreter {
         let right = Self::parse_digit(iter.next())?;
 
         match operator {
-            Operator::Plus => Ok(left + right),
-            Operator::Minus => Ok(left - right),
+            Operator::Addition => Ok(left + right),
+            Operator::Subtraction => Ok(left - right),
+            Operator::Multiplication => Ok(left * right),
+            Operator::Division => Ok(left / right),
         }
     }
 }
 
 fn main() {
     println!("{}", Token::Integer(42));
-    println!("{}", Token::Operator(Operator::Plus));
+    println!("{}", Token::Operator(Operator::Addition));
     println!("{}", Token::EoF);
 
     let i = Interpreter::new("3+5".to_string());
@@ -155,6 +161,12 @@ fn main() {
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new(" 82 - 43 ".to_string());
+    println!("{}", i.expr().unwrap());
+
+    let i = Interpreter::new(" 6 × 30 ".to_string());
+    println!("{}", i.expr().unwrap());
+
+    let i = Interpreter::new("35  ÷  6".to_string());
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("3".to_string());
