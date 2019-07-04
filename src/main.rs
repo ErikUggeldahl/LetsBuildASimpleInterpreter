@@ -40,13 +40,11 @@ impl<'a> Iterator for InterpreterIter<'a> {
     type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (position, character) = loop {
-            let (position, character) = match self.iter.next() {
-                Some(character) => character,
-                None => return None,
-            };
-            if character == ' ' { continue; }
-            break (position, character)
+        self.advance_whitespace();
+
+        let (position, character) = match self.iter.next() {
+            Some(character) => character,
+            None => return None,
         };
 
         if character.is_digit(10) {
@@ -70,7 +68,22 @@ impl<'a> Iterator for InterpreterIter<'a> {
             '÷' | '/' => Some(Ok(Token::Operator(Operator::Division))),
             _ => Some(Err(ParseError::UnexpectedCharacter(character, position))),
         }
+    }
+}
 
+impl<'a> InterpreterIter<'a> {
+    fn advance_whitespace(&mut self) {
+        loop {
+            match self.iter.peek() {
+                Some(&(_, character)) if character == ' ' => { self.iter.next() },
+                _ => return,
+            };
+        }
+    }
+
+    fn peek(&mut self) -> Option<()> {
+        self.advance_whitespace();
+        self.iter.peek().map(|_| ())
     }
 }
 
@@ -84,12 +97,11 @@ enum ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ParseError::UnexpectedCharacter(character, index) =>
-                write!(f, "Invalid character {} at index {}.", character, index),
-            ParseError::UnexpectedToken(token) =>
-                write!(f, "Invalid token: {}", token),
-            ParseError::UnexpectedEoF =>
-                write!(f, "Unexpected end of file."),
+            ParseError::UnexpectedCharacter(character, index) => {
+                write!(f, "Invalid character {} at index {}.", character, index)
+            }
+            ParseError::UnexpectedToken(token) => write!(f, "Invalid token: {}", token),
+            ParseError::UnexpectedEoF => write!(f, "Unexpected end of file."),
         }
     }
 }
@@ -109,7 +121,7 @@ impl Interpreter {
         }
     }
 
-    fn parse_digit(token: Option<Result<Token, ParseError>>) -> Result<i32, ParseError> {
+    fn parse_number(token: Option<Result<Token, ParseError>>) -> Result<i32, ParseError> {
         match token {
             Some(Ok(Token::Integer(n))) => Ok(n),
             Some(Ok(token)) => Err(ParseError::UnexpectedToken(token)),
@@ -122,25 +134,33 @@ impl Interpreter {
         match token {
             Some(Ok(Token::Operator(operator))) => Ok(operator),
             Some(Ok(token)) => Err(ParseError::UnexpectedToken(token)),
-            Some(Err(error)) =>  Err(error),
+            Some(Err(error)) => Err(error),
             None => Err(ParseError::UnexpectedEoF),
         }
     }
 
     fn expr(&self) -> Result<i32, ParseError> {
         let mut iter = self.iter();
-        let left = Self::parse_digit(iter.next())?;
+        let mut left = Self::parse_number(iter.next())?;
 
-        let operator = Self::parse_operator(iter.next())?;
+        loop {
+            let operator = Self::parse_operator(iter.next())?;
 
-        let right = Self::parse_digit(iter.next())?;
+            let right = Self::parse_number(iter.next())?;
 
-        match operator {
-            Operator::Addition => Ok(left + right),
-            Operator::Subtraction => Ok(left - right),
-            Operator::Multiplication => Ok(left * right),
-            Operator::Division => Ok(left / right),
+            left = match operator {
+                Operator::Addition => left + right,
+                Operator::Subtraction => left - right,
+                Operator::Multiplication => left * right,
+                Operator::Division => left / right,
+            };
+
+            if iter.peek().is_none() {
+                break;
+            }
         }
+
+        Ok(left)
     }
 }
 
@@ -167,6 +187,9 @@ fn main() {
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("35  ÷  6".to_string());
+    println!("{}", i.expr().unwrap());
+
+    let i = Interpreter::new("35  ÷  6 * 10".to_string());
     println!("{}", i.expr().unwrap());
 
     let i = Interpreter::new("3".to_string());
