@@ -54,7 +54,7 @@ impl<'a> Iterator for InterpreterIter<'a> {
                     Some(&(_, c)) if c.is_digit(10) => {
                         base = base * 10 + c.to_digit(10).unwrap() as i32;
                         self.iter.next();
-                    },
+                    }
                     _ => break,
                 }
             }
@@ -75,7 +75,7 @@ impl<'a> InterpreterIter<'a> {
     fn advance_whitespace(&mut self) {
         loop {
             match self.iter.peek() {
-                Some(&(_, character)) if character == ' ' => { self.iter.next() },
+                Some(&(_, character)) if character.is_whitespace() => self.iter.next(),
                 _ => return,
             };
         }
