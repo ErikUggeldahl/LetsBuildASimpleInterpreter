@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::{self, Write};
 
 #[derive(Debug, Clone)]
 enum Operator {
@@ -200,4 +201,21 @@ fn main() {
 
     let i = Interpreter::new("i".to_string());
     println!("{}", i.expr().unwrap_err());
+
+    loop {
+        print!("> ");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        match std::io::stdin().read_line(&mut input) {
+            Ok(_) if input == "\n" || input =="\r\n" => break,
+            Ok(_) => {
+                let interpteter = Interpreter::new(input);
+                match interpteter.expr() {
+                    Ok(result) => println!("{}", result),
+                    Err(e) => println!("Error: {}", e),
+                };
+            }
+            Err(error) => println!("error: {}", error),
+        }
+    }
 }
