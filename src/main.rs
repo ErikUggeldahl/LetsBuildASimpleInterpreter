@@ -35,6 +35,8 @@ struct InterpreterIter<'a> {
     iter: std::iter::Peekable<std::iter::Enumerate<std::str::Chars<'a>>>,
 }
 
+type InterpreterPeekIter<'a> = std::iter::Peekable<InterpreterIter<'a>>;
+
 impl<'a> Iterator for InterpreterIter<'a> {
     type Item = Result<Token, ParseError>;
 
@@ -79,11 +81,6 @@ impl<'a> InterpreterIter<'a> {
             };
         }
     }
-
-    fn peek(&mut self) -> Option<()> {
-        self.advance_whitespace();
-        self.iter.peek().map(|_| ())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -114,10 +111,11 @@ impl Interpreter {
         Interpreter { text }
     }
 
-    fn iter(&self) -> InterpreterIter {
+    fn iter(&self) -> std::iter::Peekable<InterpreterIter> {
         InterpreterIter {
             iter: self.text.chars().enumerate().peekable(),
         }
+        .peekable()
     }
 
     fn parse_number(token: Option<Result<Token, ParseError>>) -> Result<i32, ParseError> {
@@ -138,28 +136,48 @@ impl Interpreter {
         }
     }
 
-    fn expr(&self) -> Result<i32, ParseError> {
-        let mut iter = self.iter();
-        let mut left = Self::parse_number(iter.next())?;
+    fn factor(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
+        Self::parse_number(iter.next())
+    }
 
+    fn term(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
+        let mut left = Self::factor(iter)?;
         loop {
-            let operator = Self::parse_operator(iter.next())?;
-
-            let right = Self::parse_number(iter.next())?;
-
-            left = match operator {
-                Operator::Addition => left + right,
-                Operator::Subtraction => left - right,
-                Operator::Multiplication => left * right,
-                Operator::Division => left / right,
-            };
-
-            if iter.peek().is_none() {
-                break;
+            match iter.peek() {
+                Some(Ok(Token::Operator(Operator::Multiplication)))
+                | Some(Ok(Token::Operator(Operator::Division))) => {
+                    let operator = Self::parse_operator(iter.next())?;
+                    let right = Self::parse_number(iter.next())?;
+                    match operator {
+                        Operator::Multiplication => left *= right,
+                        Operator::Division => left /= right,
+                        _ => return Err(ParseError::UnexpectedToken(Token::Operator(operator))),
+                    }
+                }
+                _ => return Ok(left),
             }
         }
+    }
 
-        Ok(left)
+    fn expr(&self) -> Result<i32, ParseError> {
+        let mut iter = self.iter();
+        let mut left = Self::term(&mut iter)?;
+
+        loop {
+            match iter.peek() {
+                Some(Ok(Token::Operator(Operator::Addition)))
+                | Some(Ok(Token::Operator(Operator::Subtraction))) => {
+                    let operator = Self::parse_operator(iter.next())?;
+                    let right = Self::term(&mut iter)?;
+                    match operator {
+                        Operator::Addition => left += right,
+                        Operator::Subtraction => left -= right,
+                        _ => return Err(ParseError::UnexpectedToken(Token::Operator(operator))),
+                    };
+                }
+                _ => return Ok(left),
+            }
+        }
     }
 }
 
@@ -236,7 +254,12 @@ mod tests {
 
     #[test]
     fn single_integer() {
-        assert!(Interpreter::new("3".to_string()).expr().is_err());
+        assert_eq!(Interpreter::new("3".to_string()).expr().unwrap(), 3);
+    }
+
+    #[test]
+    fn operator_precedence() {
+        assert_eq!(Interpreter::new("3 + 4 * 5 + 6".to_string()).expr().unwrap(), 29);
     }
 
     #[test]
