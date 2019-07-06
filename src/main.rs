@@ -19,7 +19,6 @@ impl fmt::Display for Operator {
 enum Token {
     Integer(i32),
     Operator(Operator),
-    EoF,
 }
 
 impl fmt::Display for Token {
@@ -27,7 +26,6 @@ impl fmt::Display for Token {
         let (name, value) = match self {
             Token::Integer(n) => ("Integer", n.to_string()),
             Token::Operator(kind) => ("Operator", kind.to_string()),
-            Token::EoF => ("EOF", "None".to_string()),
         };
         write!(f, "Token({}, {})", name, value)
     }
@@ -166,48 +164,12 @@ impl Interpreter {
 }
 
 fn main() {
-    println!("{}", Token::Integer(42));
-    println!("{}", Token::Operator(Operator::Addition));
-    println!("{}", Token::EoF);
-
-    let i = Interpreter::new("3+5".to_string());
-    let mut iter = i.iter();
-    println!("{}", iter.next().unwrap().unwrap());
-    println!("{}", iter.next().unwrap().unwrap());
-    println!("{}", iter.next().unwrap().unwrap());
-
-    println!("{}", i.expr().unwrap());
-
-    let i = Interpreter::new("  20  +   55  ".to_string());
-    println!("{}", i.expr().unwrap());
-
-    let i = Interpreter::new(" 82 - 43 ".to_string());
-    println!("{}", i.expr().unwrap());
-
-    let i = Interpreter::new(" 6 × 30 ".to_string());
-    println!("{}", i.expr().unwrap());
-
-    let i = Interpreter::new("35  ÷  6".to_string());
-    println!("{}", i.expr().unwrap());
-
-    let i = Interpreter::new("35  ÷  6 * 10".to_string());
-    println!("{}", i.expr().unwrap());
-
-    let i = Interpreter::new("3".to_string());
-    println!("{}", i.expr().unwrap_err());
-
-    let i = Interpreter::new("+".to_string());
-    println!("{}", i.expr().unwrap_err());
-
-    let i = Interpreter::new("i".to_string());
-    println!("{}", i.expr().unwrap_err());
-
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
         let mut input = String::new();
         match std::io::stdin().read_line(&mut input) {
-            Ok(_) if input == "\n" || input =="\r\n" => break,
+            Ok(_) if input == "\n" || input == "\r\n" => break,
             Ok(_) => {
                 let interpteter = Interpreter::new(input);
                 match interpteter.expr() {
@@ -217,5 +179,74 @@ fn main() {
             }
             Err(error) => println!("error: {}", error),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic_addition() {
+        assert_eq!(Interpreter::new("3+5".to_string()).expr().unwrap(), 8);
+    }
+
+    #[test]
+    fn addition_with_whitespace() {
+        assert_eq!(
+            Interpreter::new("  20  +   55  ".to_string())
+                .expr()
+                .unwrap(),
+            75
+        );
+    }
+
+    #[test]
+    fn subtraction() {
+        assert_eq!(
+            Interpreter::new("  20  +   55  ".to_string())
+                .expr()
+                .unwrap(),
+            75
+        );
+    }
+
+    #[test]
+    fn multiplication() {
+        assert_eq!(
+            Interpreter::new(" 6 × 30 ".to_string()).expr().unwrap(),
+            180
+        );
+    }
+
+    #[test]
+    fn division() {
+        assert_eq!(Interpreter::new("35  ÷  6".to_string()).expr().unwrap(), 5);
+    }
+
+    #[test]
+    fn multiple_operations() {
+        assert_eq!(
+            Interpreter::new("35  ÷  6 * 10".to_string())
+                .expr()
+                .unwrap(),
+            50
+        );
+    }
+
+    #[test]
+    fn single_integer() {
+        assert!(Interpreter::new("3".to_string()).expr().is_err());
+    }
+
+    #[test]
+    fn incomplete_addition() {
+        assert!(Interpreter::new("+".to_string()).expr().is_err());
+        assert!(Interpreter::new("3 +".to_string()).expr().is_err());
+    }
+
+    #[test]
+    fn non_number() {
+        assert!(Interpreter::new("i".to_string()).expr().is_err());
     }
 }
