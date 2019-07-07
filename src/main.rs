@@ -273,59 +273,30 @@ fn main() {
 mod tests {
     use super::*;
 
+    type TestResult = Result<(), ParseError>;
+
     #[test]
-    fn basic_addition() {
-        assert_eq!(Interpreter::interpret(Lexer::new("3+5")).unwrap(), 8);
+    fn single_integer() -> TestResult {
+        assert_eq!(Interpreter::interpret(Lexer::new("3"))?, 3);
+        assert_eq!(Interpreter::interpret(Lexer::new("123"))?, 123);
+        Ok(())
     }
 
     #[test]
-    fn addition_with_whitespace() {
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("  20  +   55  ")).unwrap(),
-            75
-        );
+    fn arithmetic_operators() -> TestResult {
+        assert_eq!(Interpreter::interpret(Lexer::new("3+5"))?, 8);
+        assert_eq!(Interpreter::interpret(Lexer::new("  20  +   55  "))?, 75);
+        assert_eq!(Interpreter::interpret(Lexer::new(" 821 - 437 "))?, 384);
+        assert_eq!(Interpreter::interpret(Lexer::new(" 6 × 30 "))?, 180);
+        assert_eq!(Interpreter::interpret(Lexer::new("35  ÷  6"))?, 5);
+        assert_eq!(Interpreter::interpret(Lexer::new("35  ÷  6 * 10"))?, 50);
+        Ok(())
     }
 
     #[test]
-    fn subtraction() {
-        assert_eq!(
-            Interpreter::interpret(Lexer::new(" 821 - 437 ")).unwrap(),
-            384
-        );
-    }
-
-    #[test]
-    fn multiplication() {
-        assert_eq!(
-            Interpreter::interpret(Lexer::new(" 6 × 30 ")).unwrap(),
-            180
-        );
-    }
-
-    #[test]
-    fn division() {
-        assert_eq!(Interpreter::interpret(Lexer::new("35  ÷  6")).unwrap(), 5);
-    }
-
-    #[test]
-    fn multiple_operations() {
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("35  ÷  6 * 10")).unwrap(),
-            50
-        );
-    }
-
-    #[test]
-    fn single_integer() {
-        assert_eq!(Interpreter::interpret(Lexer::new("3")).unwrap(), 3);
-    }
-
-    #[test]
-    fn operator_precedence() {
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("3 + 4 * 5 + 6")).unwrap(),
-            29
-        );
+    fn operator_precedence() -> TestResult {
+        assert_eq!(Interpreter::interpret(Lexer::new("3 + 4 * 5 + 6"))?, 29);
+        Ok(())
     }
 
     #[test]
@@ -340,47 +311,23 @@ mod tests {
     }
 
     #[test]
-    fn parentheses() {
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("(3 + 4) * 5 + 6")).unwrap(),
-            41
-        );
-
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("3 + 4 * (5 + 6)")).unwrap(),
-            47
-        );
-
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("(3 + 4) * (5 + 6)")).unwrap(),
-            77
-        );
-
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("(3 + (4 * 5) + 6)")).unwrap(),
-            29
-        );
-
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("3 + 4 * 5 + 6")).unwrap(),
-            29
-        );
-
+    fn parentheses() -> TestResult {
+        assert_eq!(Interpreter::interpret(Lexer::new("(3 + 4) * 5 + 6"))?, 41);
+        assert_eq!(Interpreter::interpret(Lexer::new("3 + 4 * (5 + 6)"))?, 47);
+        assert_eq!(Interpreter::interpret(Lexer::new("(3 + 4) * (5 + 6)"))?, 77);
+        assert_eq!(Interpreter::interpret(Lexer::new("(3 + (4 * 5) + 6)"))?, 29);
+        assert_eq!(Interpreter::interpret(Lexer::new("3 + 4 * 5 + 6"))?, 29);
         assert_eq!(
             Interpreter::interpret(Lexer::new(
                 "7 + 3 * (10 / (12 / (3 + 1) - 1)) / (2 + 3) - 5 - 3 + (8)"
-            ))
-            .unwrap(),
+            ))?,
             10
         );
-
-        assert_eq!(
-            Interpreter::interpret(Lexer::new("7 + (((3 + 2)))")).unwrap(),
-            12
-        );
+        assert_eq!(Interpreter::interpret(Lexer::new("7 + (((3 + 2)))"))?, 12);
 
         assert!(Interpreter::interpret(Lexer::new("((3 + 4) * 5 + 6")).is_err());
-
         assert!(Interpreter::interpret(Lexer::new("((3 + 4 *) 5 + 6)")).is_err());
+        Ok(())
+    }
     }
 }
