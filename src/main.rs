@@ -251,6 +251,56 @@ impl NodeVisitor<i32> for Interpreter {
     }
 }
 
+struct ReversePolishNotationInterpreter;
+
+impl ReversePolishNotationInterpreter {
+    fn interpret(mut lexer: PeekLexer) -> Result<String, ParseError> {
+        let result = Parser::expr(&mut lexer)?;
+        Self::visit(&result)
+    }
+
+    fn visit_binary_operation(node: &ASTNode) -> Result<String, ParseError> {
+        match &node.data {
+            ASTNodeData::BinaryOperation(BinaryOperation { left, right }) => Ok([
+                Self::visit(&left)?,
+                " ".to_string(),
+                Self::visit(&right)?,
+                match node.token {
+                    Token::Operator(Operator::Addition) => " +".to_string(),
+                    Token::Operator(Operator::Subtraction) => " -".to_string(),
+                    Token::Operator(Operator::Multiplication) => " ×".to_string(),
+                    Token::Operator(Operator::Division) => " ÷".to_string(),
+                    _ => unreachable!(),
+                },
+            ]
+            .concat()),
+            _ => unreachable!(),
+        }
+    }
+
+
+    fn visit_number(node: &ASTNode) -> Result<String, ParseError> {
+        match &node.data {
+            ASTNodeData::Number => match node.token {
+                Token::Integer(n) => Ok(n.to_string()),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+
+}
+
+impl NodeVisitor<String> for ReversePolishNotationInterpreter {
+    fn visit(node: &ASTNode) -> Result<String, ParseError> {
+        match node.data {
+            ASTNodeData::BinaryOperation(_) => Self::visit_binary_operation(node),
+            ASTNodeData::Number => Self::visit_number(node),
+        }
+    }
+}
+
+
 fn main() {
     loop {
         print!("> ");
@@ -382,5 +432,16 @@ mod tests {
         assert!(Interpreter::interpret(Lexer::new("((3 + 4) * 5 + 6")).is_err());
 
         assert!(Interpreter::interpret(Lexer::new("((3 + 4 *) 5 + 6)")).is_err());
+    }
+
+    #[test]
+    fn reverse_polish_notation() {
+        assert_eq!(
+            &ReversePolishNotationInterpreter::interpret(Lexer::new(
+                "7 + 3 * (10 / (12 / (3 + 1) - 1)) / (2 + 3) - 5 - 3 + (8)"
+            ))
+            .unwrap(),
+            "7 3 10 12 3 1 + ÷ 1 - ÷ × 2 3 + ÷ + 5 - 3 - 8 +"
+        );
     }
 }
