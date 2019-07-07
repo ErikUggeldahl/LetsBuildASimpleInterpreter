@@ -33,13 +33,31 @@ impl fmt::Display for Token {
     }
 }
 
-struct InterpreterIter<'a> {
+struct Lexer<'a> {
     iter: std::iter::Peekable<std::iter::Enumerate<std::str::Chars<'a>>>,
 }
 
-type InterpreterPeekIter<'a> = std::iter::Peekable<InterpreterIter<'a>>;
+type PeekLexer<'a> = std::iter::Peekable<Lexer<'a>>;
 
-impl<'a> Iterator for InterpreterIter<'a> {
+impl<'a> Lexer<'a> {
+    fn new(string: &'a str) -> PeekLexer<'a> {
+        Self {
+            iter: string.chars().enumerate().peekable(),
+        }
+        .peekable()
+    }
+
+    fn advance_whitespace(&mut self) {
+        loop {
+            match self.iter.peek() {
+                Some(&(_, character)) if character.is_whitespace() => self.iter.next(),
+                _ => return,
+            };
+        }
+    }
+}
+
+impl<'a> Iterator for Lexer<'a> {
     type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -76,17 +94,6 @@ impl<'a> Iterator for InterpreterIter<'a> {
     }
 }
 
-impl<'a> InterpreterIter<'a> {
-    fn advance_whitespace(&mut self) {
-        loop {
-            match self.iter.peek() {
-                Some(&(_, character)) if character.is_whitespace() => self.iter.next(),
-                _ => return,
-            };
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 enum ParseError {
     UnexpectedCharacter(char, usize),
@@ -106,72 +113,60 @@ impl fmt::Display for ParseError {
     }
 }
 
-struct Interpreter {
-    text: String,
+struct BinaryOperation {
+    left: Box<ASTNode>,
+    right: Box<ASTNode>,
 }
 
-impl Interpreter {
-    fn new(text: String) -> Interpreter {
-        Interpreter { text }
-    }
+enum ASTNodeData {
+    BinaryOperation(BinaryOperation),
+    Number,
+}
 
-    fn iter(&self) -> std::iter::Peekable<InterpreterIter> {
-        InterpreterIter {
-            iter: self.text.chars().enumerate().peekable(),
-        }
-        .peekable()
-    }
+struct ASTNode {
+    token: Token,
+    data: ASTNodeData,
+}
 
-    fn parse_number(token: Option<Result<Token, ParseError>>) -> Result<i32, ParseError> {
-        match token {
-            Some(Ok(Token::Integer(n))) => Ok(n),
-            Some(Ok(token)) => Err(ParseError::UnexpectedToken(token)),
-            Some(Err(error)) => Err(error),
-            None => Err(ParseError::UnexpectedEoF),
-        }
-    }
+struct Parser;
 
-    fn parse_operator(token: Option<Result<Token, ParseError>>) -> Result<Operator, ParseError> {
-        match token {
-            Some(Ok(Token::Operator(operator))) => Ok(operator),
-            Some(Ok(token)) => Err(ParseError::UnexpectedToken(token)),
-            Some(Err(error)) => Err(error),
-            None => Err(ParseError::UnexpectedEoF),
-        }
-    }
-
-    fn factor(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
-        match iter.peek() {
+impl Parser {
+    fn factor(lexer: &mut PeekLexer) -> Result<ASTNode, ParseError> {
+        match lexer.next() {
             Some(Ok(Token::Operator(Operator::LeftParenthesis))) => {
-                Self::parse_operator(iter.next())?;
-                let result = Self::expr(iter)?;
-                let close_parenthesis = Self::parse_operator(iter.next())?;
+                let result = Self::expr(lexer);
+                let close_parenthesis = lexer.next();
                 match close_parenthesis {
-                    Operator::RightParenthesis => Ok(result),
-                    _ => Err(ParseError::UnexpectedToken(Token::Operator(
-                        close_parenthesis,
-                    ))),
+                    Some(Ok(Token::Operator(Operator::RightParenthesis))) => result,
+                    Some(Ok(token)) => Err(ParseError::UnexpectedToken(token)),
+                    Some(Err(error)) => Err(error),
+                    None => Err(ParseError::UnexpectedEoF),
                 }
             }
-            Some(Ok(Token::Integer(_))) => Self::parse_number(iter.next()),
-            Some(Ok(_)) => Err(ParseError::UnexpectedToken(iter.next().unwrap()?)),
-            Some(Err(_)) => Err(iter.next().unwrap().unwrap_err()),
+            Some(Ok(token @ Token::Integer(_))) => Ok(ASTNode {
+                token,
+                data: ASTNodeData::Number,
+            }),
+            Some(Ok(token)) => Err(ParseError::UnexpectedToken(token)),
+            Some(Err(error)) => Err(error),
             None => Err(ParseError::UnexpectedEoF),
         }
     }
 
-    fn term(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
-        let mut left = Self::factor(iter)?;
+    fn term(lexer: &mut PeekLexer) -> Result<ASTNode, ParseError> {
+        let mut left = Self::factor(lexer)?;
         loop {
-            match iter.peek() {
+            match lexer.peek() {
                 Some(Ok(Token::Operator(Operator::Multiplication)))
                 | Some(Ok(Token::Operator(Operator::Division))) => {
-                    let operator = Self::parse_operator(iter.next())?;
-                    let right = Self::factor(iter)?;
-                    match operator {
-                        Operator::Multiplication => left *= right,
-                        Operator::Division => left /= right,
-                        _ => return Err(ParseError::UnexpectedToken(Token::Operator(operator))),
+                    let operator = lexer.next().unwrap()?;
+                    let right = Self::factor(lexer)?;
+                    left = ASTNode {
+                        token: operator,
+                        data: ASTNodeData::BinaryOperation(BinaryOperation {
+                            left: Box::new(left),
+                            right: Box::new(right),
+                        }),
                     }
                 }
                 _ => return Ok(left),
@@ -179,23 +174,77 @@ impl Interpreter {
         }
     }
 
-    fn expr(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
-        let mut left = Self::term(iter)?;
-
+    fn expr(lexer: &mut PeekLexer) -> Result<ASTNode, ParseError> {
+        let mut left = Self::term(lexer)?;
         loop {
-            match iter.peek() {
+            match lexer.peek() {
                 Some(Ok(Token::Operator(Operator::Addition)))
                 | Some(Ok(Token::Operator(Operator::Subtraction))) => {
-                    let operator = Self::parse_operator(iter.next())?;
-                    let right = Self::term(iter)?;
-                    match operator {
-                        Operator::Addition => left += right,
-                        Operator::Subtraction => left -= right,
-                        _ => return Err(ParseError::UnexpectedToken(Token::Operator(operator))),
-                    };
+                    let operator = lexer.next().unwrap()?;
+                    let right = Self::term(lexer)?;
+                    left = ASTNode {
+                        token: operator,
+                        data: ASTNodeData::BinaryOperation(BinaryOperation {
+                            left: Box::new(left),
+                            right: Box::new(right),
+                        }),
+                    }
                 }
                 _ => return Ok(left),
             }
+        }
+    }
+}
+
+type NodeVisitor = dyn Fn(&ASTNode) -> Result<i32, ParseError>;
+
+fn binary_operation_visit(node: &ASTNode) -> Result<i32, ParseError> {
+    match &node.data {
+        ASTNodeData::BinaryOperation(BinaryOperation { left, right }) => match node.token {
+            Token::Operator(Operator::Addition) => {
+                Ok(Interpreter::visit(&left)? + Interpreter::visit(&right)?)
+            }
+            Token::Operator(Operator::Subtraction) => {
+                Ok(Interpreter::visit(&left)? - Interpreter::visit(&right)?)
+            }
+            Token::Operator(Operator::Multiplication) => {
+                Ok(Interpreter::visit(&left)? * Interpreter::visit(&right)?)
+            }
+            Token::Operator(Operator::Division) => {
+                Ok(Interpreter::visit(&left)? / Interpreter::visit(&right)?)
+            }
+            _ => unreachable!(),
+        },
+        _ => unreachable!(),
+    }
+}
+
+fn number_visit(node: &ASTNode) -> Result<i32, ParseError> {
+    match &node.data {
+        ASTNodeData::Number => match node.token {
+            Token::Integer(n) => Ok(n),
+            _ => unreachable!(),
+        },
+        _ => unreachable!(),
+    }
+}
+
+struct Interpreter;
+
+impl Interpreter {
+    fn interpret(mut lexer: PeekLexer) -> Result<i32, ParseError> {
+        let result = Parser::expr(&mut lexer)?;
+        Self::visit(&result)
+    }
+
+    fn visit(node: &ASTNode) -> Result<i32, ParseError> {
+        Self::visitor_for_node(node)(node)
+    }
+
+    fn visitor_for_node(node: &ASTNode) -> &NodeVisitor {
+        match node.data {
+            ASTNodeData::BinaryOperation(_) => &binary_operation_visit,
+            ASTNodeData::Number => &number_visit,
         }
     }
 }
@@ -208,8 +257,7 @@ fn main() {
         match std::io::stdin().read_line(&mut input) {
             Ok(_) if input == "\n" || input == "\r\n" => break,
             Ok(_) => {
-                let interpteter = Interpreter::new(input);
-                match Interpreter::expr(&mut interpteter.iter()) {
+                match Interpreter::interpret(Lexer::new(&input)) {
                     Ok(result) => println!("{}", result),
                     Err(e) => println!("Error: {}", e),
                 };
@@ -225,16 +273,13 @@ mod tests {
 
     #[test]
     fn basic_addition() {
-        assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("3+5".to_string()).iter()).unwrap(),
-            8
-        );
+        assert_eq!(Interpreter::interpret(Lexer::new("3+5")).unwrap(), 8);
     }
 
     #[test]
     fn addition_with_whitespace() {
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("  20  +   55  ".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("  20  +   55  ")).unwrap(),
             75
         );
     }
@@ -242,7 +287,7 @@ mod tests {
     #[test]
     fn subtraction() {
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new(" 821 - 437 ".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new(" 821 - 437 ")).unwrap(),
             384
         );
     }
@@ -250,107 +295,90 @@ mod tests {
     #[test]
     fn multiplication() {
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new(" 6 × 30 ".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new(" 6 × 30 ")).unwrap(),
             180
         );
     }
 
     #[test]
     fn division() {
-        assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("35  ÷  6".to_string()).iter()).unwrap(),
-            5
-        );
+        assert_eq!(Interpreter::interpret(Lexer::new("35  ÷  6")).unwrap(), 5);
     }
 
     #[test]
     fn multiple_operations() {
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("35  ÷  6 * 10".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("35  ÷  6 * 10")).unwrap(),
             50
         );
     }
 
     #[test]
     fn single_integer() {
-        assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("3".to_string()).iter()).unwrap(),
-            3
-        );
+        assert_eq!(Interpreter::interpret(Lexer::new("3")).unwrap(), 3);
     }
 
     #[test]
     fn operator_precedence() {
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("3 + 4 * 5 + 6".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("3 + 4 * 5 + 6")).unwrap(),
             29
         );
     }
 
     #[test]
     fn incomplete_addition() {
-        assert!(Interpreter::expr(&mut Interpreter::new("+".to_string()).iter()).is_err());
-        assert!(Interpreter::expr(&mut Interpreter::new("3 +".to_string()).iter()).is_err());
+        assert!(Interpreter::interpret(Lexer::new("+")).is_err());
+        assert!(Interpreter::interpret(Lexer::new("3 +")).is_err());
     }
 
     #[test]
     fn non_number() {
-        assert!(Interpreter::expr(&mut Interpreter::new("i".to_string()).iter()).is_err());
+        assert!(Interpreter::interpret(Lexer::new("i")).is_err());
     }
 
     #[test]
     fn parentheses() {
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("(3 + 4) * 5 + 6".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("(3 + 4) * 5 + 6")).unwrap(),
             41
         );
 
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("3 + 4 * (5 + 6)".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("3 + 4 * (5 + 6)")).unwrap(),
             47
         );
 
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("(3 + 4) * (5 + 6)".to_string()).iter())
-                .unwrap(),
+            Interpreter::interpret(Lexer::new("(3 + 4) * (5 + 6)")).unwrap(),
             77
         );
 
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("(3 + (4 * 5) + 6)".to_string()).iter())
-                .unwrap(),
+            Interpreter::interpret(Lexer::new("(3 + (4 * 5) + 6)")).unwrap(),
             29
         );
 
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("3 + 4 * 5 + 6".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("3 + 4 * 5 + 6")).unwrap(),
             29
         );
 
         assert_eq!(
-            Interpreter::expr(
-                &mut Interpreter::new(
-                    "7 + 3 * (10 / (12 / (3 + 1) - 1)) / (2 + 3) - 5 - 3 + (8)".to_string()
-                )
-                .iter()
-            )
+            Interpreter::interpret(Lexer::new(
+                "7 + 3 * (10 / (12 / (3 + 1) - 1)) / (2 + 3) - 5 - 3 + (8)"
+            ))
             .unwrap(),
             10
         );
 
         assert_eq!(
-            Interpreter::expr(&mut Interpreter::new("7 + (((3 + 2)))".to_string()).iter()).unwrap(),
+            Interpreter::interpret(Lexer::new("7 + (((3 + 2)))")).unwrap(),
             12
         );
 
-        assert!(
-            Interpreter::expr(&mut Interpreter::new("((3 + 4) * 5 + 6".to_string()).iter())
-                .is_err()
-        );
+        assert!(Interpreter::interpret(Lexer::new("((3 + 4) * 5 + 6")).is_err());
 
-        assert!(
-            Interpreter::expr(&mut Interpreter::new("((3 + 4 *) 5 + 6)".to_string()).iter())
-                .is_err()
-        );
+        assert!(Interpreter::interpret(Lexer::new("((3 + 4 *) 5 + 6)")).is_err());
     }
 }
