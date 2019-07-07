@@ -327,6 +327,22 @@ mod tests {
             29
         );
 
+        assert_eq!(
+            Interpreter::expr(
+                &mut Interpreter::new(
+                    "7 + 3 * (10 / (12 / (3 + 1) - 1)) / (2 + 3) - 5 - 3 + (8)".to_string()
+                )
+                .iter()
+            )
+            .unwrap(),
+            10
+        );
+
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("7 + (((3 + 2)))".to_string()).iter()).unwrap(),
+            12
+        );
+
         assert!(
             Interpreter::expr(&mut Interpreter::new("((3 + 4) * 5 + 6".to_string()).iter())
                 .is_err()
