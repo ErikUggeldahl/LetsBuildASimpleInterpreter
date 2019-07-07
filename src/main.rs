@@ -7,6 +7,8 @@ enum Operator {
     Subtraction,
     Multiplication,
     Division,
+    LeftParenthesis,
+    RightParenthesis,
 }
 
 impl fmt::Display for Operator {
@@ -67,6 +69,8 @@ impl<'a> Iterator for InterpreterIter<'a> {
             '-' => Some(Ok(Token::Operator(Operator::Subtraction))),
             '×' | '*' => Some(Ok(Token::Operator(Operator::Multiplication))),
             '÷' | '/' => Some(Ok(Token::Operator(Operator::Division))),
+            '(' => Some(Ok(Token::Operator(Operator::LeftParenthesis))),
+            ')' => Some(Ok(Token::Operator(Operator::RightParenthesis))),
             _ => Some(Err(ParseError::UnexpectedCharacter(character, position))),
         }
     }
@@ -137,7 +141,23 @@ impl Interpreter {
     }
 
     fn factor(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
-        Self::parse_number(iter.next())
+        match iter.peek() {
+            Some(Ok(Token::Operator(Operator::LeftParenthesis))) => {
+                Self::parse_operator(iter.next())?;
+                let result = Self::expr(iter)?;
+                let close_parenthesis = Self::parse_operator(iter.next())?;
+                match close_parenthesis {
+                    Operator::RightParenthesis => Ok(result),
+                    _ => Err(ParseError::UnexpectedToken(Token::Operator(
+                        close_parenthesis,
+                    ))),
+                }
+            }
+            Some(Ok(Token::Integer(_))) => Self::parse_number(iter.next()),
+            Some(Ok(_)) => Err(ParseError::UnexpectedToken(iter.next().unwrap()?)),
+            Some(Err(_)) => Err(iter.next().unwrap().unwrap_err()),
+            None => Err(ParseError::UnexpectedEoF),
+        }
     }
 
     fn term(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
@@ -147,7 +167,7 @@ impl Interpreter {
                 Some(Ok(Token::Operator(Operator::Multiplication)))
                 | Some(Ok(Token::Operator(Operator::Division))) => {
                     let operator = Self::parse_operator(iter.next())?;
-                    let right = Self::parse_number(iter.next())?;
+                    let right = Self::factor(iter)?;
                     match operator {
                         Operator::Multiplication => left *= right,
                         Operator::Division => left /= right,
@@ -276,5 +296,45 @@ mod tests {
     #[test]
     fn non_number() {
         assert!(Interpreter::expr(&mut Interpreter::new("i".to_string()).iter()).is_err());
+    }
+
+    #[test]
+    fn parentheses() {
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("(3 + 4) * 5 + 6".to_string()).iter()).unwrap(),
+            41
+        );
+
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("3 + 4 * (5 + 6)".to_string()).iter()).unwrap(),
+            47
+        );
+
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("(3 + 4) * (5 + 6)".to_string()).iter())
+                .unwrap(),
+            77
+        );
+
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("(3 + (4 * 5) + 6)".to_string()).iter())
+                .unwrap(),
+            29
+        );
+
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("3 + 4 * 5 + 6".to_string()).iter()).unwrap(),
+            29
+        );
+
+        assert!(
+            Interpreter::expr(&mut Interpreter::new("((3 + 4) * 5 + 6".to_string()).iter())
+                .is_err()
+        );
+
+        assert!(
+            Interpreter::expr(&mut Interpreter::new("((3 + 4 *) 5 + 6)".to_string()).iter())
+                .is_err()
+        );
     }
 }
