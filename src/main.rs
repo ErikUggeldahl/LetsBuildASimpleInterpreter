@@ -196,37 +196,8 @@ impl Parser {
     }
 }
 
-type NodeVisitor = dyn Fn(&ASTNode) -> Result<i32, ParseError>;
-
-fn binary_operation_visit(node: &ASTNode) -> Result<i32, ParseError> {
-    match &node.data {
-        ASTNodeData::BinaryOperation(BinaryOperation { left, right }) => match node.token {
-            Token::Operator(Operator::Addition) => {
-                Ok(Interpreter::visit(&left)? + Interpreter::visit(&right)?)
-            }
-            Token::Operator(Operator::Subtraction) => {
-                Ok(Interpreter::visit(&left)? - Interpreter::visit(&right)?)
-            }
-            Token::Operator(Operator::Multiplication) => {
-                Ok(Interpreter::visit(&left)? * Interpreter::visit(&right)?)
-            }
-            Token::Operator(Operator::Division) => {
-                Ok(Interpreter::visit(&left)? / Interpreter::visit(&right)?)
-            }
-            _ => unreachable!(),
-        },
-        _ => unreachable!(),
-    }
-}
-
-fn number_visit(node: &ASTNode) -> Result<i32, ParseError> {
-    match &node.data {
-        ASTNodeData::Number => match node.token {
-            Token::Integer(n) => Ok(n),
-            _ => unreachable!(),
-        },
-        _ => unreachable!(),
-    }
+trait NodeVisitor<T> {
+    fn visit(node: &ASTNode) -> Result<T, ParseError>;
 }
 
 struct Interpreter;
@@ -237,14 +208,45 @@ impl Interpreter {
         Self::visit(&result)
     }
 
-    fn visit(node: &ASTNode) -> Result<i32, ParseError> {
-        Self::visitor_for_node(node)(node)
+    fn visit_binary_operation(node: &ASTNode) -> Result<i32, ParseError> {
+        match &node.data {
+            ASTNodeData::BinaryOperation(BinaryOperation { left, right }) => match node.token {
+                Token::Operator(Operator::Addition) => {
+                    Ok(Interpreter::visit(&left)? + Interpreter::visit(&right)?)
+                }
+                Token::Operator(Operator::Subtraction) => {
+                    Ok(Interpreter::visit(&left)? - Interpreter::visit(&right)?)
+                }
+                Token::Operator(Operator::Multiplication) => {
+                    Ok(Interpreter::visit(&left)? * Interpreter::visit(&right)?)
+                }
+                Token::Operator(Operator::Division) => {
+                    Ok(Interpreter::visit(&left)? / Interpreter::visit(&right)?)
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
     }
 
-    fn visitor_for_node(node: &ASTNode) -> &NodeVisitor {
+
+    fn visit_number(node: &ASTNode) -> Result<i32, ParseError> {
+        match &node.data {
+            ASTNodeData::Number => match node.token {
+                Token::Integer(n) => Ok(n),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+
+}
+
+impl NodeVisitor<i32> for Interpreter {
+    fn visit(node: &ASTNode) -> Result<i32, ParseError> {
         match node.data {
-            ASTNodeData::BinaryOperation(_) => &binary_operation_visit,
-            ASTNodeData::Number => &number_visit,
+            ASTNodeData::BinaryOperation(_) => Self::visit_binary_operation(node),
+            ASTNodeData::Number => Self::visit_number(node),
         }
     }
 }
