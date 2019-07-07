@@ -159,16 +159,15 @@ impl Interpreter {
         }
     }
 
-    fn expr(&self) -> Result<i32, ParseError> {
-        let mut iter = self.iter();
-        let mut left = Self::term(&mut iter)?;
+    fn expr(iter: &mut InterpreterPeekIter) -> Result<i32, ParseError> {
+        let mut left = Self::term(iter)?;
 
         loop {
             match iter.peek() {
                 Some(Ok(Token::Operator(Operator::Addition)))
                 | Some(Ok(Token::Operator(Operator::Subtraction))) => {
                     let operator = Self::parse_operator(iter.next())?;
-                    let right = Self::term(&mut iter)?;
+                    let right = Self::term(iter)?;
                     match operator {
                         Operator::Addition => left += right,
                         Operator::Subtraction => left -= right,
@@ -190,7 +189,7 @@ fn main() {
             Ok(_) if input == "\n" || input == "\r\n" => break,
             Ok(_) => {
                 let interpteter = Interpreter::new(input);
-                match interpteter.expr() {
+                match Interpreter::expr(&mut interpteter.iter()) {
                     Ok(result) => println!("{}", result),
                     Err(e) => println!("Error: {}", e),
                 };
@@ -206,15 +205,16 @@ mod tests {
 
     #[test]
     fn basic_addition() {
-        assert_eq!(Interpreter::new("3+5".to_string()).expr().unwrap(), 8);
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("3+5".to_string()).iter()).unwrap(),
+            8
+        );
     }
 
     #[test]
     fn addition_with_whitespace() {
         assert_eq!(
-            Interpreter::new("  20  +   55  ".to_string())
-                .expr()
-                .unwrap(),
+            Interpreter::expr(&mut Interpreter::new("  20  +   55  ".to_string()).iter()).unwrap(),
             75
         );
     }
@@ -222,54 +222,59 @@ mod tests {
     #[test]
     fn subtraction() {
         assert_eq!(
-            Interpreter::new("  20  +   55  ".to_string())
-                .expr()
-                .unwrap(),
-            75
+            Interpreter::expr(&mut Interpreter::new(" 821 - 437 ".to_string()).iter()).unwrap(),
+            384
         );
     }
 
     #[test]
     fn multiplication() {
         assert_eq!(
-            Interpreter::new(" 6 × 30 ".to_string()).expr().unwrap(),
+            Interpreter::expr(&mut Interpreter::new(" 6 × 30 ".to_string()).iter()).unwrap(),
             180
         );
     }
 
     #[test]
     fn division() {
-        assert_eq!(Interpreter::new("35  ÷  6".to_string()).expr().unwrap(), 5);
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("35  ÷  6".to_string()).iter()).unwrap(),
+            5
+        );
     }
 
     #[test]
     fn multiple_operations() {
         assert_eq!(
-            Interpreter::new("35  ÷  6 * 10".to_string())
-                .expr()
-                .unwrap(),
+            Interpreter::expr(&mut Interpreter::new("35  ÷  6 * 10".to_string()).iter()).unwrap(),
             50
         );
     }
 
     #[test]
     fn single_integer() {
-        assert_eq!(Interpreter::new("3".to_string()).expr().unwrap(), 3);
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("3".to_string()).iter()).unwrap(),
+            3
+        );
     }
 
     #[test]
     fn operator_precedence() {
-        assert_eq!(Interpreter::new("3 + 4 * 5 + 6".to_string()).expr().unwrap(), 29);
+        assert_eq!(
+            Interpreter::expr(&mut Interpreter::new("3 + 4 * 5 + 6".to_string()).iter()).unwrap(),
+            29
+        );
     }
 
     #[test]
     fn incomplete_addition() {
-        assert!(Interpreter::new("+".to_string()).expr().is_err());
-        assert!(Interpreter::new("3 +".to_string()).expr().is_err());
+        assert!(Interpreter::expr(&mut Interpreter::new("+".to_string()).iter()).is_err());
+        assert!(Interpreter::expr(&mut Interpreter::new("3 +".to_string()).iter()).is_err());
     }
 
     #[test]
     fn non_number() {
-        assert!(Interpreter::new("i".to_string()).expr().is_err());
+        assert!(Interpreter::expr(&mut Interpreter::new("i".to_string()).iter()).is_err());
     }
 }
