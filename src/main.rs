@@ -119,6 +119,7 @@ struct BinaryOperation {
 }
 
 enum ASTNodeData {
+    UnaryOperation(Box<ASTNode>),
     BinaryOperation(BinaryOperation),
     Number,
 }
@@ -143,6 +144,11 @@ impl Parser {
                     None => Err(ParseError::UnexpectedEoF),
                 }
             }
+            Some(Ok(token @ Token::Operator(Operator::Addition)))
+            | Some(Ok(token @ Token::Operator(Operator::Subtraction))) => Ok(ASTNode {
+                token,
+                data: ASTNodeData::UnaryOperation(Box::new(Self::expr(lexer)?)),
+            }),
             Some(Ok(token @ Token::Integer(_))) => Ok(ASTNode {
                 token,
                 data: ASTNodeData::Number,
@@ -208,6 +214,17 @@ impl Interpreter {
         Self::visit(&result)
     }
 
+    fn visit_unary_operation(node: &ASTNode) -> Result<i32, ParseError> {
+        match &node.data {
+            ASTNodeData::UnaryOperation(child) => match node.token {
+                Token::Operator(Operator::Addition) => Self::visit(&child),
+                Token::Operator(Operator::Subtraction) => Ok(-Self::visit(&child)?),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+
     fn visit_binary_operation(node: &ASTNode) -> Result<i32, ParseError> {
         match &node.data {
             ASTNodeData::BinaryOperation(BinaryOperation { left, right }) => match node.token {
@@ -245,6 +262,7 @@ impl Interpreter {
 impl NodeVisitor<i32> for Interpreter {
     fn visit(node: &ASTNode) -> Result<i32, ParseError> {
         match node.data {
+            ASTNodeData::UnaryOperation(_) => Self::visit_unary_operation(node),
             ASTNodeData::BinaryOperation(_) => Self::visit_binary_operation(node),
             ASTNodeData::Number => Self::visit_number(node),
         }
@@ -329,5 +347,13 @@ mod tests {
         assert!(Interpreter::interpret(Lexer::new("((3 + 4 *) 5 + 6)")).is_err());
         Ok(())
     }
+
+    #[test]
+    fn unary_operator() -> TestResult {
+        assert_eq!(Interpreter::interpret(Lexer::new("+23"))?, 23);
+        assert_eq!(Interpreter::interpret(Lexer::new("-23"))?, -23);
+        assert_eq!(Interpreter::interpret(Lexer::new("5 - - - + - 3"))?, 8);
+        assert_eq!(Interpreter::interpret(Lexer::new("5---+-(3 + 4)-+2"))?, 10);
+        Ok(())
     }
 }
