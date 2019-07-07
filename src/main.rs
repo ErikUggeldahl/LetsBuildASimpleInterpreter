@@ -212,16 +212,16 @@ impl Interpreter {
         match &node.data {
             ASTNodeData::BinaryOperation(BinaryOperation { left, right }) => match node.token {
                 Token::Operator(Operator::Addition) => {
-                    Ok(Interpreter::visit(&left)? + Interpreter::visit(&right)?)
+                    Ok(Self::visit(&left)? + Self::visit(&right)?)
                 }
                 Token::Operator(Operator::Subtraction) => {
-                    Ok(Interpreter::visit(&left)? - Interpreter::visit(&right)?)
+                    Ok(Self::visit(&left)? - Self::visit(&right)?)
                 }
                 Token::Operator(Operator::Multiplication) => {
-                    Ok(Interpreter::visit(&left)? * Interpreter::visit(&right)?)
+                    Ok(Self::visit(&left)? * Self::visit(&right)?)
                 }
                 Token::Operator(Operator::Division) => {
-                    Ok(Interpreter::visit(&left)? / Interpreter::visit(&right)?)
+                    Ok(Self::visit(&left)? / Self::visit(&right)?)
                 }
                 _ => unreachable!(),
             },
